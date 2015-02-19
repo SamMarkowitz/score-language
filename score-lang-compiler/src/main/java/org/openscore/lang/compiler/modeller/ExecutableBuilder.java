@@ -112,25 +112,30 @@ public class ExecutableBuilder {
                 if(!executableRawData.containsKey(SlangTextualKeys.WORKFLOW_KEY)){
                     throw new RuntimeException("Error compiling " + parsedSlang.getName() + ". Flow: " + execName + " has no workflow property");
                 }
-                LinkedHashMap<String, Map<String, Object>> workFlowRawData;
+                List<Map<String, Object>> workFlowRawData;
                 try{
-                    workFlowRawData = (LinkedHashMap) executableRawData.get(SlangTextualKeys.WORKFLOW_KEY);
+                    workFlowRawData = (List) executableRawData.get(SlangTextualKeys.WORKFLOW_KEY);
                 } catch (ClassCastException ex){
-                    throw new RuntimeException("Flow: '" + execName + "' syntax is illegal.\nBelow 'workflow' property there should be a map of tasks and not a list");
+                    throw new RuntimeException("Flow: '" + execName + "' syntax is illegal.\nBelow 'workflow' property there should be a list of tasks and not a map");
                 }
-                if (MapUtils.isEmpty(workFlowRawData)) {
+                if (workFlowRawData == null || workFlowRawData.size() == 0) {
                     throw new RuntimeException("Error compiling " + parsedSlang.getName() + ". Flow: " + execName + " has no workflow data");
                 }
 
                 Workflow onFailureWorkFlow = null;
-                LinkedHashMap<String, Map<String, Object>> onFailureData;
-                try{
-                    onFailureData = (LinkedHashMap) workFlowRawData.remove(SlangTextualKeys.ON_FAILURE_KEY);
-                } catch (ClassCastException ex){
-                    throw new RuntimeException("Flow: '" + execName + "' syntax is illegal.\nBelow 'on_failure' property there should be a map of tasks and not a list");
-                }
-                if (MapUtils.isNotEmpty(onFailureData)) {
-                    onFailureWorkFlow = compileWorkFlow(onFailureData, imports, null, true);
+                List<Map<String, Object>> onFailureData;
+                for(Map<String, Object> task : workFlowRawData){
+                    String taskName = task.keySet().iterator().next();
+                    if(taskName.equals(SlangTextualKeys.ON_FAILURE_KEY)){
+                    try{
+                        onFailureData = (List<Map<String, Object>>)task.values().iterator().next();
+                    } catch (ClassCastException ex){
+                        throw new RuntimeException("Flow: '" + execName + "' syntax is illegal.\nBelow 'on_failure' property there should be a list of tasks and not a map");
+                    }
+                        if (onFailureData != null && onFailureData.size() > 0) {
+                            onFailureWorkFlow = compileWorkFlow(onFailureData, imports, null, true);
+                        }
+                    }
                 }
 
                 Workflow workflow = compileWorkFlow(workFlowRawData, imports, onFailureWorkFlow, false);
@@ -168,7 +173,7 @@ public class ExecutableBuilder {
         return new Action(actionData);
     }
 
-    private Workflow compileWorkFlow(LinkedHashMap<String, Map<String, Object>> workFlowRawData,
+    private Workflow compileWorkFlow(List<Map<String, Object>> workFlowRawData,
                                              Map<String, String> imports,
                                              Workflow onFailureWorkFlow,
                                              boolean onFailureSection) {
@@ -177,8 +182,8 @@ public class ExecutableBuilder {
 
         Validate.notEmpty(workFlowRawData, "Flow must have tasks in its workflow");
 
-        PeekingIterator<Map.Entry<String, Map<String, Object>>> iterator =
-                new PeekingIterator<>(workFlowRawData.entrySet().iterator());
+        PeekingIterator<Map<String, Object>> iterator =
+                new PeekingIterator<>(workFlowRawData.iterator());
 
         boolean isOnFailureDefined = onFailureWorkFlow != null;
 
@@ -186,19 +191,19 @@ public class ExecutableBuilder {
                 onFailureWorkFlow.getTasks().getFirst().getName() : ScoreLangConstants.FAILURE_RESULT;
 
         while (iterator.hasNext()) {
-            Map.Entry<String, Map<String, Object>> taskRawData = iterator.next();
-            Map.Entry<String, Map<String, Object>> nextTaskData = iterator.peek();
-            String taskName = taskRawData.getKey();
-            Map<String, Object> taskRawDataValue;
-            try {
-                taskRawDataValue = taskRawData.getValue();
-            } catch (ClassCastException ex){
-                throw new RuntimeException("Task: " + taskName + " syntax is illegal.\nBelow task name, there should be a map of values in the format:\ndo:\n\top_name:");
-            }
+            Map<String, Object> taskRawData = iterator.next();
+            Map<String, Object> nextTaskData = iterator.peek();
+            String taskName = taskRawData.keySet().iterator().next();
+            Object taskRawDataValue = taskRawData.values().iterator().next();
+//            try {
+//                Map<String, Object>taskRawDataValue;
+//            } catch (ClassCastException ex){
+//                throw new RuntimeException("Task: " + taskName + " syntax is illegal.\nBelow task name, there should be a map of values in the format:\ndo:\n\top_name:");
+//            }
 
            String defaultSuccess;
             if (nextTaskData != null) {
-                defaultSuccess = nextTaskData.getKey();
+                defaultSuccess = nextTaskData.keySet().iterator().next();
             } else {
                 defaultSuccess = onFailureSection ? ScoreLangConstants.FAILURE_RESULT : ScoreLangConstants.SUCCESS_RESULT;
             }
